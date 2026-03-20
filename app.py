@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -15,11 +16,26 @@ BASE_DIR     = os.path.dirname(__file__)
 CONFIG_PATH  = os.path.join(BASE_DIR, "config.json")
 WEIGHTS_PATH = os.path.join(BASE_DIR, "model.weights.h5")
 
-# Build model from architecture (config.json), then load weights
+# Load and clean config — remove keys unsupported by this Keras version
 with open(CONFIG_PATH, "r") as f:
     config = json.load(f)
 
-model = keras.models.model_from_json(json.dumps(config))
+def remove_unsupported_keys(obj):
+    """Recursively remove keys that older Keras versions don't support."""
+    unsupported = {"quantization_config", "dtype_policy", "shared_object_id"}
+    if isinstance(obj, dict):
+        return {
+            k: remove_unsupported_keys(v)
+            for k, v in obj.items()
+            if k not in unsupported
+        }
+    elif isinstance(obj, list):
+        return [remove_unsupported_keys(i) for i in obj]
+    return obj
+
+clean_config = remove_unsupported_keys(config)
+
+model = keras.models.model_from_json(json.dumps(clean_config))
 model.load_weights(WEIGHTS_PATH)
 
 # ── Class labels (CIFAR-10) ──────────────────────────────────────────────────
